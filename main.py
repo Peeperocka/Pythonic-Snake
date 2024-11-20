@@ -450,13 +450,11 @@ class SnakeGame(QWidget):
             options = json.load(options)
             for option in options:
                 if option["name"] == self.difficulty_name:
-                    selected_options = option
+                    self.selected_options = option
                     break
 
-        self.is_surrounded_by_walls = selected_options.get('is_surrounded_by_walls', False)
-
         # Подключаем графику после удачного парсинга информации о уровне
-        self.set_window_size(selected_options['grid_size'])
+        self.set_window_size(self.selected_options['grid_size'])
 
         self.level_items = {}
 
@@ -468,12 +466,10 @@ class SnakeGame(QWidget):
                                                        y * self.tile_size))
 
         self.new_direction = "right"
-
-        self.ups = selected_options['updates_per_second']
         self.tick = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_game_state)
-        self.timer.start(round((1000 / self.ups)))
+        self.timer.start(round((1000 / self.selected_options['updates_per_second'])))
 
     def set_window_size(self, field_size: int) -> None:
         self.field_size = field_size
@@ -568,7 +564,7 @@ class SnakeGame(QWidget):
         elif head.direction == "right":
             new_head_x += self.tile_size
 
-        if self.is_surrounded_by_walls:
+        if self.selected_options.get("is_surrounded_by_walls", False):
             if new_head_x < 0 or new_head_x >= self.field_size * self.tile_size or \
                     new_head_y < 0 or new_head_y >= self.field_size * self.tile_size:
                 self.game_over()
@@ -588,7 +584,8 @@ class SnakeGame(QWidget):
         new_coords.append((new_head_x, new_head_y))
 
         for i in range(1, len(self.level_items["Змея"])):
-            new_coords.append((self.level_items["Змея"][i - 1].x, self.level_items["Змея"][i - 1].y))
+            new_coords.append((self.level_items["Змея"][i - 1].x,
+                               self.level_items["Змея"][i - 1].y))
 
         for i in range(len(self.level_items["Змея"])):
             self.level_items["Змея"][i].x = new_coords[i][0]
@@ -623,11 +620,13 @@ class SnakeGame(QWidget):
 
         try:
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            lifetime = round(self.tick / self.selected_options['updates_per_second'], 2)
+            snake_length = len(self.level_items["Змея"])
 
             cur.execute("""
-                INSERT INTO scores (score, level_name, date)
-                VALUES (?, ?, ?)
-            """, (curr_score, self.levelname, now))
+                INSERT INTO scores (score, level_name, date, life_time_sec, snake_length)
+                VALUES (?, ?, ?, ?, ?)
+            """, (curr_score, self.levelname, now, lifetime, snake_length))
 
             conn.commit()
 
@@ -669,8 +668,6 @@ class Scores(QWidget):
         super().__init__()
         self.ui = uic.loadUi("QT files/scores.ui", self)
 
-        self.con = sqlite3.connect('snake.db')
-
         self.update_levels()
         self.levelChooseBox.currentTextChanged.connect(self.on_levelchoose_changed)
 
@@ -679,36 +676,52 @@ class Scores(QWidget):
     def on_levelchoose_changed(self):
         if self.levelChooseBox.currentText() == "Перезагрузить список":
             self.update_levels()
-            return
+            return 0
 
         self.fill_scores_table()
 
     def update_levels(self):
-        cur = self.con.cursor()
-        levels = cur.execute("SELECT DISTINCT level_name FROM scores").fetchall()
+        with open('levels.csv', 'r', encoding="utf-8") as f:
+            levels = csv.reader(f)
+            next(levels)
+            levels = [level[0] for level in levels]
 
         self.levelChooseBox.clear()
-        self.levelChooseBox.addItems(level[0] for level in levels)
+        self.levelChooseBox.addItems(level for level in levels)
         self.levelChooseBox.addItem("Перезагрузить список")
 
     def fill_scores_table(self):
         self.tableWidget.clearContents()
-        self.tableWidget.setColumnCount(2)
-        self.tableWidget.setHorizontalHeaderLabels(["Результат", "Дата"])
 
-        cur = self.con.cursor()
+        con = sqlite3.connect("snake.db")
+
+        cur = con.cursor()
         level_scores = cur.execute(f"""
-            SELECT score, date FROM scores
+            SELECT score, date, life_time_sec, snake_length FROM scores
                 WHERE level_name = ?
-                ORDER BY score""", (self.levelChooseBox.currentText(),)).fetchall()
+                ORDER BY score DESC""", (self.levelChooseBox.currentText(),)).fetchall()
+
+        if not level_scores:
+            self.tableWidget.setColumnCount(1)
+            self.tableWidget.setHorizontalHeaderLabels(["Нет результатов"])
+            self.tableWidget.setRowCount(1)
+            self.tableWidget.setItem(0, 0, QTableWidgetItem("Нет результатов"))
+            self.tableWidget.horizontalHeader().setSectionResizeMode(
+                0, QHeaderView.ResizeMode.Stretch
+            )
+            return
+
+        column_headers = ["Результат", "Дата", "Время жизни", "Длина змеи"]
+
+        self.tableWidget.setColumnCount(len(column_headers))
+        self.tableWidget.setHorizontalHeaderLabels(column_headers)
 
         self.tableWidget.setRowCount(len(level_scores))
 
-        for row, (score, date) in enumerate(level_scores):
-            item_score = QTableWidgetItem(str(score))
-            self.tableWidget.setItem(row, 0, item_score)
-            item_date = QTableWidgetItem(str(date))
-            self.tableWidget.setItem(row, 1, item_date)
+        for row in range(len(level_scores)):
+            for col, value in enumerate(level_scores[row]):
+                item_score = QTableWidgetItem(str(value))
+                self.tableWidget.setItem(row, col, item_score)
 
         header = self.tableWidget.horizontalHeader()
         header.setSectionResizeMode(0, header.ResizeMode.Stretch)
@@ -767,6 +780,7 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     with suppress(FileExistsError):
         with open('options.json', 'x', encoding='utf-8') as f:
+            # База, не трогать
             initial_options = [
                 {"name": "Базовые настройки", "updates_per_second": 1, "grid_size": 10,
                  "is_surrounded_by_walls": False},
@@ -783,12 +797,14 @@ if __name__ == '__main__':
     cur = conn.cursor()
 
     cur.execute("""
-            CREATE TABLE IF NOT EXISTS scores (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                score INTEGER NOT NULL,
-                level_name TEXT NOT NULL,
-                date TEXT NOT NULL
-            )""")
+        CREATE TABLE IF NOT EXISTS scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            score INTEGER NOT NULL,
+            life_time_sec INTEGER NOT NULL,
+            snake_length INTEGER NOT NULL,
+            level_name TEXT NOT NULL,
+            date TEXT NOT NULL
+        )""")
 
     conn.commit()
     conn.close()
