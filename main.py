@@ -151,14 +151,15 @@ class SettingsDesigner(QMainWindow):
                     if not isinstance(value, int) or value <= 0:
                         raise ValueError("Размер уровня должен быть "
                                          "положительным целым числом.")
-                    elif 10 < value < 61:
+                    elif not (9 < value < 61):
                         raise ValueError("Размер уровня должен быть в пределах от 10 до 60.")
 
                 elif key == "updates_per_second":
                     if not isinstance(value, int) or value <= 0:
                         raise ValueError("Updates per second должно быть "
                                          "положительным целым числом.")
-                    elif 1 < value < 31:
+                    elif not (1 < value < 31):
+                        print(value)
                         raise ValueError("Updates per second должен быть в пределах от 1 до 30.")
 
                 elif key == "is_surrounded_by_walls":
@@ -782,7 +783,7 @@ if __name__ == '__main__':
         with open('options.json', 'x', encoding='utf-8') as f:
             # База, не трогать
             initial_options = [
-                {"name": "Базовые настройки", "updates_per_second": 1, "grid_size": 10,
+                {"name": "Базовые настройки", "updates_per_second": 10, "grid_size": 10,
                  "is_surrounded_by_walls": False},
             ]
             json.dump(initial_options, f, indent=4, ensure_ascii=False)
