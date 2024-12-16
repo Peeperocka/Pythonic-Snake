@@ -5,47 +5,52 @@ import math
 from PyQt6.QtCore import Qt, QRect
 from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtGui import QPainter, QBrush, QPen
-from PyQt6.QtWidgets import (QApplication, QMessageBox,
-                             QMainWindow, QInputDialog)
+from PyQt6.QtWidgets import QMessageBox, QMainWindow, QInputDialog
 from models import *
 
 
 class LevelDesigner(QMainWindow):
     def __init__(self) -> None:
+        """Инициализирует окно редактора уровней."""
         super().__init__()
         self.setupUi(self)
 
         self.init_difficulty_box()
-
         self.update_field_size()
         self.set_window_size()
 
         self.loadButton.clicked.connect(self.load_level)
         self.saveButton.clicked.connect(self.save_level)
 
+        # Список доступных инструментов, отсортированный по имени в дизайнере
         self.tools = sorted(ITEMS_CLASSES, key=lambda x: x.designer_name)
-
+        # Связь между кнопками, выпадающими списками и выбранными инструментами
         self.item_widgets = [
             {"button": self.firstItemButton, "combobox": self.firstItemBox},
             {"button": self.secondItemButton, "combobox": self.secondItemBox},
             {"button": self.thirdItemButton, "combobox": self.thirdItemBox}
         ]
 
+        # Настройка виджетов инструментов
         for index, item_widget in enumerate(self.item_widgets):
             button = item_widget["button"]
             combobox = item_widget["combobox"]
 
+            # Добавление всех инструментов в выпадающий список
             for tool in self.tools:
                 combobox.addItem(tool.designer_name)
 
+            # Установка выбранного инструмента по умолчанию
             selected_tool = self.tools[index % len(self.tools)]
             combobox.setCurrentText(selected_tool.designer_name)
             button.setText(selected_tool.designer_name)
-            item_widget["selected_tool"] = selected_tool
+            item_widget["selected_tool"] = selected_tool  # Сохранение ссылки на выбранный инструмент
 
+            # Подключение слотов для обработки событий
             combobox.currentIndexChanged.connect(self.change_comboboxes_items)
             button.clicked.connect(self.tool_button_clicked)
 
+        # Установка инструмента по умолчанию
         self.selected_tool = self.tools[0]
 
     def setupUi(self, LevelDesigner):
@@ -217,6 +222,7 @@ class LevelDesigner(QMainWindow):
         self.saveButton.setText(_translate("LevelDesigner", "Сохранить"))
 
     def init_difficulty_box(self):
+        """Загружает параметры сложности из файла options.json."""
         with open('options.json', 'r', encoding='utf-8') as f:
             options = json.load(f)
             difficulty_options_names = [option["name"] for option in options]
@@ -225,6 +231,7 @@ class LevelDesigner(QMainWindow):
         self.difficultyBox.currentIndexChanged.connect(self.update_field_size)
 
     def change_comboboxes_items(self):
+        """Обновляет выбранный инструмент после изменения в выпадающем списке."""
         sender_combobox = self.sender()
         for item_widget in self.item_widgets:
             if item_widget["combobox"] == sender_combobox:
@@ -235,6 +242,7 @@ class LevelDesigner(QMainWindow):
                 break
 
     def tool_button_clicked(self):
+        """Обновляет выбранный инструмент после нажатия на кнопку."""
         sender_button = self.sender()
         for item_widget in self.item_widgets:
             if item_widget["button"] == sender_button:
@@ -242,20 +250,17 @@ class LevelDesigner(QMainWindow):
                 break
 
     def update_field_size(self):
+        """Обновляет размер игрового поля в соответствии с выбранной сложностью."""
         try:
             with open('options.json', 'r', encoding='utf-8') as f:
                 options = json.load(f)
+                # Находим параметр сложности по имени из выпадающего списка
                 difficulty_option = next(
-                    (option for option in options
-                     if option["name"] == self.difficultyBox.currentText()), None)
-
+                    (option for option in options if option["name"] == self.difficultyBox.currentText()), None)
                 if difficulty_option:
                     self.field_size = difficulty_option["grid_size"]
-                    self.init_field()
-
-        except json.JSONDecodeError as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка чтения файла options.json: {e}")
-            QApplication.quit()
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки настроек: {e}")
             return
 
         self.init_field()
@@ -263,62 +268,58 @@ class LevelDesigner(QMainWindow):
         self.update()
 
     def init_field(self):
+        """Инициализирует игровое поле нулями."""
         self.field = [[0] * self.field_size for _ in range(self.field_size)]
         self.set_window_size()
 
     def set_window_size(self):
+        """Устанавливает размер окна в зависимости от размера поля."""
         self.tile_size = 800 // self.field_size
         ideal_size = self.field_size * self.tile_size + 1
         self.setFixedSize(ideal_size, ideal_size + 115)
 
     def mousePressEvent(self, event):
+        """Обрабатывает нажатие мыши для размещения/удаления объектов."""
         super().mousePressEvent(event)
         row = int(event.position().x() // self.tile_size)
         col = int((event.position().y() - 100) // self.tile_size)
 
-        if not (0 <= row < self.field_size and 0 <= col < self.field_size):
-            return
-
-        if event.button() == Qt.MouseButton.RightButton:
-            self.field[row][col] = 0
-        else:
-            self.field[row][col] = self.selected_tool()
-
-        self.update()
+        if 0 <= row < self.field_size and 0 <= col < self.field_size:
+            if event.button() == Qt.RightButton:
+                self.field[row][col] = 0  # Удаление объекта правой кнопкой мыши
+            else:
+                self.field[row][col] = self.selected_tool  # Размещение объекта левой кнопкой мыши
+            self.update()
 
     def paintEvent(self, event):
+        """Перерисовывает игровое поле."""
         qp = QPainter(self)
-
         for i in range(self.field_size):
             for j in range(self.field_size):
+                # Рисуем рамку ячейки
                 qp.setPen(QPen(QColor(255, 0, 0), 0))
                 qp.setBrush(QBrush(QColor(0, 0, 0, 0)))
+                qp.drawRect(QRect(i * self.tile_size, j * self.tile_size + 100, self.tile_size, self.tile_size))
 
-                qp.drawRect(QRect(
-                    (i * self.tile_size),
-                    (j * self.tile_size) + 100,
-                    self.tile_size, self.tile_size
-                ))
-
-                if self.field[i][j] != 0:
+                # Рисуем объект, если он есть
+                if self.field[i][j]:
                     qp.setBrush(QBrush(self.field[i][j].body_color))
                     qp.setPen(QPen(self.field[i][j].edge_color, self.pen_width))
-
-                    qp.drawRect(QRect(
-                        int(i * self.tile_size + self.pen_width / 2),
-                        int(j * self.tile_size + 100 + self.pen_width / 2),
-                        int(self.tile_size - self.pen_width),
-                        int(self.tile_size - self.pen_width)
-                    ))
+                    qp.drawRect(QRect(int(i * self.tile_size + self.pen_width / 2),
+                                      int(j * self.tile_size + 100 + self.pen_width / 2),
+                                      int(self.tile_size - self.pen_width),
+                                      int(self.tile_size - self.pen_width)))
 
     def load_level(self):
+        """Загружает данные уровня из CSV файла."""
         levelname, ok = QInputDialog.getText(self, "Загрузка файла", "Название уровня:")
-        if not (levelname and ok):
+        if not ok or not levelname:
             return
 
-        with open('levels.csv', 'r', encoding='utf-8') as levels:
-            levels = csv.reader(levels)
-            next(levels)
+        with open('levels.csv', 'r', encoding='utf-8') as levels_file:
+            levels = csv.reader(levels_file)
+            next(levels)  # Skip header row
+
             try:
                 for level in levels:
                     if level[0] == levelname:
@@ -326,73 +327,69 @@ class LevelDesigner(QMainWindow):
                         level_items = json.loads(level[2])
                         break
                 else:
-                    QMessageBox.warning(self, "Ошибка", f"Уровня с именем '{levelname}' не существует.")
+                    QMessageBox.warning(self, "Ошибка", f"Уровня '{levelname}' не существует.")
                     return
-            except json.JSONDecodeError as e:
-                QMessageBox.warning(self, "Ошибка", f"Ошибка при декодировании JSON: {e}")
+            except (json.JSONDecodeError, IndexError) as e:
+                QMessageBox.warning(self, "Ошибка", f"Ошибка чтения файла: {e}")
                 return
 
-        classes_names = {}
-        for class_item in ITEMS_CLASSES:
-            classes_names[class_item.designer_name] = class_item
+        # Создаем словарь для быстрого доступа к классам по имени
+        classes_names = {cls.designer_name: cls for cls in ITEMS_CLASSES}
 
         self.difficultyBox.setCurrentText(level_options)
-
         self.init_field()
 
         for item_data in level_items:
-            self.field[int(item_data['x'])][item_data['y']] = classes_names[item_data['class']]
+            try:
+                self.field[int(item_data['x'])][int(item_data['y'])] = classes_names[item_data['class']]
+            except (KeyError, IndexError) as e:
+                QMessageBox.warning(self, "Ошибка", f"Ошибка при загрузке данных уровня: {e}")
+                return
 
         self.update()
-        self.statusBar().showMessage(f"Уровень '{levelname}' успешно загружен.")
+        self.statusBar().showMessage(f"Уровень '{levelname}' загружен.")
 
     def save_level(self):
+        """Сохраняет текущий уровень в CSV файл."""
         levelname, ok = QInputDialog.getText(self, "Сохранение файла", "Название уровня:")
-        if not (levelname and ok):
+        if not ok or not levelname:
             return
 
         level_items = []
-
-        # Валидация и сборка объектов на уровне
         has_snake = False
 
         for row in range(self.field_size):
             for col in range(self.field_size):
-                if self.field[row][col] != 0:
+                if self.field[row][col]:
                     level_items.append({
                         'x': row,
                         'y': col,
                         'class': self.field[row][col].designer_name
                     })
-
                     if isinstance(self.field[row][col], SnakeHead):
                         if has_snake:
-                            QMessageBox.warning(self, "Ошибка",
-                                                f"Уровень не может более 1 змеи.")
+                            QMessageBox.warning(self, "Ошибка", "Уровень может содержать только одну змею.")
                             return
-
                         has_snake = True
 
         if not has_snake:
-            QMessageBox.warning(self, "Ошибка", f"Уровень должен содержать змею.")
+            QMessageBox.warning(self, "Ошибка", "Уровень должен содержать змею.")
             return
 
         with open('levels.csv', 'r', encoding='utf-8', newline='') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
             level_exists = False
-            print(rows)
 
             for i, row in enumerate(rows):
                 if row['name'] == levelname:
                     level_exists = True
                     reply = QMessageBox.question(
                         self, "Перезапись уровня",
-                        f"Уровень с именем '{levelname}' уже существует. Перезаписать?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        f"Уровень '{levelname}' уже существует. Перезаписать?",
+                        QMessageBox.Yes | QMessageBox.No
                     )
-
-                    if reply == QMessageBox.StandardButton.Yes:
+                    if reply == QMessageBox.Yes:
                         rows[i] = {'name': levelname, 'option_name': self.difficultyBox.currentText(),
                                    'items': json.dumps(level_items, ensure_ascii=False)}
                         break
@@ -403,11 +400,10 @@ class LevelDesigner(QMainWindow):
             rows.append({'name': levelname, 'option_name': self.difficultyBox.currentText(),
                          'items': json.dumps(level_items, ensure_ascii=False)})
 
-        print(rows)
         with open('levels.csv', 'w', encoding='utf-8', newline='') as f:
             fieldnames = ['name', 'option_name', 'items']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
 
-        self.statusBar().showMessage(f"Уровень '{levelname}' успешно сохранен.")
+        self.statusBar().showMessage(f"Уровень '{levelname}' сохранен.")

@@ -117,12 +117,15 @@ class MainWindow(QMainWindow):
         self.exitButton.setText(_translate("MainWindow", "Выход"))
 
     def on_levelchoose_changed(self):
+        """Обновляет список уровней при выборе пункта "Перезагрузить список"."""
         if self.levelChoose.currentText() == "Перезагрузить список":
             self.fill_level_choose_box()
 
     def fill_level_choose_box(self):
+        """Заполняет выпадающий список уровней из файла levels.csv."""
         self.levelChoose.clear()
 
+        # Чтение данных уровней из CSV файла
         with open('levels.csv', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
@@ -131,26 +134,31 @@ class MainWindow(QMainWindow):
         self.levelChoose.addItem("Перезагрузить список")
 
     def open_designer(self):
+        """Открывает окно редактора уровней."""
         self.designer = LevelDesigner()
         self.designer.show()
         self.designer.activateWindow()
 
     def open_snake_game(self):
+        """Открывает окно игры "Змейка" с выбранным уровнем."""
         self.snake_game = SnakeGame(self.levelChoose.currentText())
         self.snake_game.show()
         self.snake_game.activateWindow()
 
     def open_settings_designer(self):
+        """Открывает окно редактора настроек."""
         self.settings_designer = SettingsDesigner()
         self.settings_designer.show()
         self.settings_designer.activateWindow()
 
     def open_scores(self):
+        """Открывает окно с таблицей рекордов."""
         self.scores = Scores()
         self.scores.show()
         self.scores.activateWindow()
 
     def open_achievements(self):
+        """Открывает окно с достижениями."""
         self.achievements = Achievements()
         self.achievements.show()
         self.achievements.activateWindow()

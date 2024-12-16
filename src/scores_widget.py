@@ -2,19 +2,21 @@ import csv
 
 import sqlite3
 
-from PyQt6.QtWidgets import (QWidget, QTableWidgetItem, QHeaderView)
+from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QMessageBox
 from PyQt6 import QtCore, QtWidgets
 
 
 class Scores(QWidget):
     def __init__(self):
+        """Инициализирует окно с таблицей рекордов."""
         super().__init__()
         self.setupUi(self)
 
-        self.update_levels()
+        self.update_levels()  # Инициализация списка уровней при запуске
+        # Подключение слота для обработки изменения выбранного уровня
         self.levelChooseBox.currentTextChanged.connect(self.on_levelchoose_changed)
 
-        self.fill_scores_table()
+        self.fill_scores_table()  # Инициализация таблицы рекордов
 
     def setupUi(self, Form):
         Form.setObjectName("Form")
@@ -59,55 +61,70 @@ class Scores(QWidget):
         Form.setWindowTitle(_translate("Form", "Результаты"))
 
     def on_levelchoose_changed(self):
+        """Обрабатывает изменение выбора уровня в выпадающем списке."""
         if self.levelChooseBox.currentText() == "Перезагрузить список":
             self.update_levels()
-            return 0
+            return  # Важно: выход из функции, чтобы избежать повторного заполнения таблицы
 
-        self.fill_scores_table()
+        self.fill_scores_table()  # Обновление таблицы рекордов для нового уровня
 
     def update_levels(self):
-        with open('levels.csv', 'r', encoding="utf-8") as f:
-            levels = csv.reader(f)
-            next(levels)
-            levels = [level[0] for level in levels]
+        """Обновляет список уровней из файла levels.csv."""
+        try:
+            with open('levels.csv', 'r', encoding="utf-8") as f:
+                reader = csv.reader(f)
+                next(reader)  # Пропуск заголовка
+                levels = [level[0] for level in reader]  # Извлечение имен уровней
+        except FileNotFoundError:
+            QMessageBox.critical(self, "Ошибка", "Файл levels.csv не найден.")
+            return  # Прерывание выполнения функции при ошибке
 
         self.levelChooseBox.clear()
-        self.levelChooseBox.addItems(level for level in levels)
+        self.levelChooseBox.addItems(levels)
         self.levelChooseBox.addItem("Перезагрузить список")
 
     def fill_scores_table(self):
-        self.tableWidget.clearContents()
+        """Заполняет таблицу рекордов данными из базы данных."""
+        self.tableWidget.clearContents()  # Очистка таблицы перед обновлением
 
-        con = sqlite3.connect("snake.db")
+        try:
+            con = sqlite3.connect("snake.db")
+            cur = con.cursor()
 
-        cur = con.cursor()
-        level_scores = cur.execute(f"""
-            SELECT score, date, life_time_sec, snake_length FROM scores
-                WHERE level_name = ?
-                ORDER BY score DESC""", (self.levelChooseBox.currentText(),)).fetchall()
+            # Запрос данных из базы данных для выбранного уровня
+            level_scores = cur.execute(f"""
+                SELECT score, date, life_time_sec, snake_length FROM scores
+                    WHERE level_name = ?
+                    ORDER BY score DESC""", (self.levelChooseBox.currentText(),)).fetchall()
 
-        if not level_scores:
-            self.tableWidget.setColumnCount(1)
-            self.tableWidget.setHorizontalHeaderLabels(["Нет результатов"])
-            self.tableWidget.setRowCount(1)
-            self.tableWidget.setItem(0, 0, QTableWidgetItem("Нет результатов"))
-            self.tableWidget.horizontalHeader().setSectionResizeMode(
-                0, QHeaderView.ResizeMode.Stretch
-            )
-            return
+            # Обработка пустого результата запроса
+            if not level_scores:
+                self.tableWidget.setColumnCount(1)
+                self.tableWidget.setHorizontalHeaderLabels(["Нет результатов"])
+                self.tableWidget.setRowCount(1)
+                self.tableWidget.setItem(0, 0, QTableWidgetItem("Нет результатов"))
+                self.tableWidget.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+                return
 
-        column_headers = ["Результат", "Дата", "Время жизни", "Длина змеи"]
+            # Заголовки столбцов
+            column_headers = ["Результат", "Дата", "Время жизни", "Длина змеи"]
+            self.tableWidget.setColumnCount(len(column_headers))
+            self.tableWidget.setHorizontalHeaderLabels(column_headers)
+            self.tableWidget.setRowCount(len(level_scores))
 
-        self.tableWidget.setColumnCount(len(column_headers))
-        self.tableWidget.setHorizontalHeaderLabels(column_headers)
+            # Заполнение таблицы данными
+            for row, score_data in enumerate(level_scores):
+                for col, value in enumerate(score_data):
+                    item = QTableWidgetItem(str(value))
+                    self.tableWidget.setItem(row, col, item)
 
-        self.tableWidget.setRowCount(len(level_scores))
+            # Автоматическое изменение размера столбцов
+            header = self.tableWidget.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
 
-        for row in range(len(level_scores)):
-            for col, value in enumerate(level_scores[row]):
-                item_score = QTableWidgetItem(str(value))
-                self.tableWidget.setItem(row, col, item_score)
-
-        header = self.tableWidget.horizontalHeader()
-        header.setSectionResizeMode(0, header.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, header.ResizeMode.Stretch)
+        except sqlite3.Error as e:
+            QMessageBox.critical(self, "Ошибка базы данных", f"Ошибка работы с базой данных: {e}")
+        finally:
+            if 'con' in locals() and con:  # Проверка на существование соединения
+                con.close()
