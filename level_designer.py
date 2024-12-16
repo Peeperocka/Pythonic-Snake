@@ -184,16 +184,9 @@ class LevelDesigner(QMainWindow):
         if not (levelname and ok):
             return
 
-        with open('levels.csv', 'r', encoding='utf-8') as levels:
-            levels = csv.DictReader(levels)
-
-            for level in levels:
-                if level['name'] == levelname:
-                    QMessageBox.warning(self, "Ошибка", f"Уровень с именем '{levelname}' уже существует.")
-                    return
-
         level_items = []
 
+        # Валидация и сборка объектов на уровне
         has_snake = False
 
         for row in range(self.field_size):
@@ -217,13 +210,37 @@ class LevelDesigner(QMainWindow):
             QMessageBox.warning(self, "Ошибка", f"Уровень должен содержать змею.")
             return
 
-        file_exists = os.path.exists('levels.csv')
+        with open('levels.csv', 'r', encoding='utf-8', newline='') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            level_exists = False
+            print(rows)
 
-        with open('levels.csv', 'a', encoding='utf-8', newline='') as levels:
-            writer = csv.writer(levels)
-            if not file_exists:
-                writer.writerow(['levelname', 'difficulty', 'items'])
-            writer.writerow([levelname, self.difficultyBox.currentText(),
-                             json.dumps(level_items, ensure_ascii=False)])
+            for i, row in enumerate(rows):
+                if row['name'] == levelname:
+                    level_exists = True
+                    reply = QMessageBox.question(
+                        self, "Перезапись уровня",
+                        f"Уровень с именем '{levelname}' уже существует. Перезаписать?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+
+                    if reply == QMessageBox.StandardButton.Yes:
+                        rows[i] = {'name': levelname, 'option_name': self.difficultyBox.currentText(),
+                                   'items': json.dumps(level_items, ensure_ascii=False)}
+                        break
+                    else:
+                        return
+
+        if not level_exists:
+            rows.append({'name': levelname, 'option_name': self.difficultyBox.currentText(),
+                         'items': json.dumps(level_items, ensure_ascii=False)})
+
+        print(rows)
+        with open('levels.csv', 'w', encoding='utf-8', newline='') as f:
+            fieldnames = ['name', 'option_name', 'items']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
 
         self.statusBar().showMessage(f"Уровень '{levelname}' успешно сохранен.")

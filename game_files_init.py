@@ -1,12 +1,11 @@
 import csv
 import json
+import os
 import sqlite3
-
-from contextlib import suppress
 
 
 def create_files():
-    with suppress(FileExistsError):
+    if not os.path.exists('options.json'):
         with open('options.json', 'x', encoding='utf-8') as f:
             # База, не трогать
             initial_options = [
@@ -15,6 +14,7 @@ def create_files():
             ]
             json.dump(initial_options, f, indent=4, ensure_ascii=False)
 
+    if not os.path.exists('levels.csv'):
         with open('levels.csv', 'x', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(['name', 'option_name', 'items'])
