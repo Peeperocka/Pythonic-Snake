@@ -106,16 +106,26 @@ class SettingsDesigner(QMainWindow):
             QMessageBox.warning(self, "Ошибка настроек", str(e))
             return
 
-        # Пытаемся сохранить настройку
         try:
             with open('options.json', 'r', encoding='utf-8') as f:
                 existing_options = json.load(f)
 
-            for option in existing_options:
+            for i, option in enumerate(existing_options):
                 if option.get("name") == items["name"]:
-                    raise ValueError(f"Настройка с именем '{items['name']}' уже существует.")
+                    # Настройка с таким именем уже существует, спрашиваем пользователя
+                    reply = QMessageBox.question(
+                        self, "Перезапись настройки",
+                        f"Настройка с именем '{items['name']}' уже существует. Перезаписать?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    if reply == QMessageBox.StandardButton.Yes:
+                        existing_options[i] = items
+                        break
+                    else:
+                        return
 
-            existing_options.append(items)
+            else:
+                existing_options.append(items)
 
             with open('options.json', 'w', encoding='utf-8') as f:
                 json.dump(existing_options, f, indent=4, ensure_ascii=False)
@@ -124,7 +134,7 @@ class SettingsDesigner(QMainWindow):
 
         except json.JSONDecodeError as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка чтения файла options.json: {e}")
-        except ValueError as e:
+        except Exception as e:  # Общий обработчик ошибок
             QMessageBox.warning(self, "Ошибка", str(e))
 
     def load_option(self):
