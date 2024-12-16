@@ -1,0 +1,8 @@
+[
+    {
+        "name": "Базовые настройки",
+        "updates_per_second": 10,
+        "grid_size": 10,
+        "is_surrounded_by_walls": false
+    }
+]
