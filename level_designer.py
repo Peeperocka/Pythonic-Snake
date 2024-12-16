@@ -1,7 +1,6 @@
 import csv
 import json
 import math
-import os
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QRect

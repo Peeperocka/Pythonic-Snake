@@ -63,6 +63,7 @@ class SnakeGame(QWidget):
 
         self.new_direction = "right"
         self.tick = 0
+        self.apples_eaten = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_game_state)
         self.timer.start(round((1000 / self.selected_options['updates_per_second'])))
@@ -198,13 +199,51 @@ class SnakeGame(QWidget):
                         new_segment = SnakeTile(last_segment.x, last_segment.y)
                         self.level_items["Змея"].append(new_segment)
                         self.level_items[item_name].remove(item)
+                        self.apples_eaten += 1
 
                     elif item_name == "Стена":
                         self.game_over()
+
                     elif item_name == "Змея":
                         if (item.designer_name != "Змея"
                                 and len(self.level_items["Змея"]) > 2):
                             self.game_over()
+
+    def check_achievements(self, curr_score, lifetime, snake_length):
+        conn = sqlite3.connect("snake.db")
+        cur = conn.cursor()
+
+        try:
+            achievements = cur.execute("""
+                SELECT id, condition_type, condition_value 
+                FROM achievements
+                WHERE level_name is NULL
+            """).fetchall()
+
+            for achievement_id, condition_type, condition_value in achievements:
+                unlocked = False
+                if condition_type == "score" and condition_value <= curr_score:
+                    unlocked = True
+                elif condition_type == "eat" and condition_value <= self.apples_eaten:
+                    unlocked = True
+                elif condition_type == "length" and condition_value <= snake_length:
+                    unlocked = True
+                elif condition_type == "time" and condition_value <= lifetime:
+                    unlocked = True
+
+                if unlocked:
+                    cur.execute("""
+                        UPDATE achievements 
+                        SET level_name = ?
+                        WHERE id = ?
+                    """, (self.levelname, achievement_id))
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка в работе с БД", str(e))
+            conn.rollback()
+        finally:
+            conn.commit()
+            conn.close()
 
     def game_over(self):
         self.timer.stop()
@@ -213,11 +252,13 @@ class SnakeGame(QWidget):
         cur = conn.cursor()
 
         curr_score = self.tick * (len(self.level_items["Змея"]) - 1)
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lifetime = round(self.tick / self.selected_options['updates_per_second'], 2)
+        snake_length = len(self.level_items["Змея"])
+
+        self.check_achievements(curr_score, lifetime, snake_length)
 
         try:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            lifetime = round(self.tick / self.selected_options['updates_per_second'], 2)
-            snake_length = len(self.level_items["Змея"])
 
             cur.execute("""
                 INSERT INTO scores (score, level_name, date, life_time_sec, snake_length)

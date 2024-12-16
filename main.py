@@ -9,6 +9,7 @@ from game import SnakeGame
 from settings_designer import SettingsDesigner
 from scores_widget import Scores
 from game_files_init import create_files
+from achievements_widget import Achievements
 
 
 class MainWindow(QMainWindow):
@@ -24,6 +25,7 @@ class MainWindow(QMainWindow):
         self.settingsDesignerButton.clicked.connect(self.open_settings_designer)
         self.levelChoose.currentTextChanged.connect(self.on_levelchoose_changed)
         self.scoresButton.clicked.connect(self.open_scores)
+        self.achievementsButton.clicked.connect(self.open_achievements)
 
     def on_levelchoose_changed(self):
         if self.levelChoose.currentText() == "Перезагрузить список":
@@ -58,6 +60,11 @@ class MainWindow(QMainWindow):
         self.scores = Scores()
         self.scores.show()
         self.scores.activateWindow()
+
+    def open_achievements(self):
+        self.achievements = Achievements()
+        self.achievements.show()
+        self.achievements.activateWindow()
 
 
 if __name__ == '__main__':

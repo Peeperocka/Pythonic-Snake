@@ -110,6 +110,13 @@
      <item>
       <widget class="QPushButton" name="scoresButton">
        <property name="text">
+        <string>Результаты</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="achievementsButton">
+       <property name="text">
         <string>Достижения</string>
        </property>
       </widget>
